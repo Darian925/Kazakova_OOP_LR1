@@ -18,6 +18,12 @@ namespace Kazakova_OOP_LR1
             Console.WriteLine("Населенный пункт постоянного места жительства студента: Москва");
             Console.WriteLine("Любимый предмет в школе: Изо");
             Console.WriteLine("Краткое описание хобби,увлечений,интересов: Манга и компьютерные игры ");
+
+            //Задание 2
+            //Вариант 8
+            int a = 1, G_1 = 5, Zvcw = 7 ;
+            double A0 = (35/G_1)*Zvcw+ G_1*a-((a+Zvcw)/a) ;
+            Console.WriteLine("Результат:A0={0}",A0);
             Console.ReadKey();
         }
     }
