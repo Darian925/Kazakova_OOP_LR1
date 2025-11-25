@@ -56,7 +56,6 @@ namespace Kazakova_OOP_LR2_3
         public string Name { get; protected set; }
         public int BaseLatencyMs { get; protected set; }
         public double FailureProbability { get; protected set; }
-        protected readonly Random _random = new Random();
 
         protected ServiceBase(string name, int baseLatencyMs, double failureProbability)
         {
@@ -80,10 +79,10 @@ namespace Kazakova_OOP_LR2_3
 
         public override Response Process(Request request)
         {
-            int latency = BaseLatencyMs + _random.Next(-10, 20);
+            int latency = BaseLatencyMs + Random.Shared.Next(-10, 20);
             latency = Math.Max(1, latency);
 
-            bool isSuccess = _random.NextDouble() > FailureProbability;
+            bool isSuccess = Random.Shared.NextDouble() > FailureProbability;
             var response = new Response(isSuccess, latency,
                 isSuccess ? null : "ERR_FAST",
                 isSuccess ? null : "FastService failed");
@@ -99,10 +98,10 @@ namespace Kazakova_OOP_LR2_3
 
         public override Response Process(Request request)
         {
-            int latency = BaseLatencyMs + _random.Next(-30, 60);
+            int latency = BaseLatencyMs + Random.Shared.Next(-30, 60);
             latency = Math.Max(10, latency);
 
-            bool isSuccess = _random.NextDouble() > FailureProbability;
+            bool isSuccess = Random.Shared.NextDouble() > FailureProbability;
             var response = new Response(isSuccess, latency,
                 isSuccess ? null : "ERR_SLOW",
                 isSuccess ? null : "SlowService failed");
@@ -241,13 +240,15 @@ namespace Kazakova_OOP_LR2_3
     public class Alerting
     {
         private readonly List<Alert> _alerts = new();
-        private readonly double _errorThreshold; // доля ошибок для алерта
-        private readonly int _minRequests;       // минимум запросов перед анализом
+        private readonly double _errorThreshold;
+        private readonly int _minRequests;
+        private readonly ServiceHealthEvaluator _healthEvaluator;
 
         public IReadOnlyList<Alert> Alerts => _alerts.AsReadOnly();
 
-        public Alerting(double errorThreshold = 0.1, int minRequests = 5)
+        public Alerting(ServiceHealthEvaluator healthEvaluator, double errorThreshold = 0.1, int minRequests = 5)
         {
+            _healthEvaluator = healthEvaluator ?? throw new ArgumentNullException(nameof(healthEvaluator));
             _errorThreshold = errorThreshold;
             _minRequests = minRequests;
         }
@@ -263,7 +264,7 @@ namespace Kazakova_OOP_LR2_3
                 Console.WriteLine($"⚠️ {alertMsg} for {metrics.ServiceName}");
             }
 
-            var health = new ServiceHealthEvaluator().Evaluate(metrics);
+            var health = _healthEvaluator.Evaluate(metrics);
             if (health == ServiceHealth.Unhealthy)
             {
                 var alertMsg = "Service status: UNHEALTHY";
@@ -288,33 +289,31 @@ namespace Kazakova_OOP_LR2_3
             metricsCollector.RegisterService(slowService);
 
             var healthEvaluator = new ServiceHealthEvaluator();
-
-            // Система оповещений 
-            var alerting = new Alerting(errorThreshold: 0.1, minRequests: 3);
+            var alerting = new Alerting(healthEvaluator, errorThreshold: 0.1, minRequests: 3);
             metricsCollector.OnMetricsUpdated += alerting.OnMetricsUpdatedHandler;
 
-            var random = new Random();
             var services = new IService[] { fastService, slowService };
             var requests = new List<Request>();
 
             // Генерация 80 случайных запросов
             for (int i = 0; i < 80; i++)
             {
-                var service = services[random.Next(services.Length)];
-                int payload = random.Next(50, 500);
-                int? deadline = random.Next(1, 10) == 1 ? (int?)random.Next(100, 500) : null;
+                var service = services[Random.Shared.Next(services.Length)];
+                int payload = Random.Shared.Next(50, 500);
+                int? deadline = Random.Shared.Next(1, 10) == 1 ? (int?)Random.Shared.Next(100, 500) : null;
                 requests.Add(new Request(service.Name, payload, deadline));
             }
 
-            // Обработка запросов
-            foreach (var request in requests)
+            // Обработка запросов с использованием счётчика (in counter)
+            for (int i = 0; i < requests.Count; i++)
             {
+                var request = requests[i];
                 IService service = request.ServiceName == fastService.Name ? fastService : slowService;
                 Response response = service.Process(request);
                 metricsCollector.Record(request, response);
 
                 // Периодический вывод (каждые 20 запросов)
-                if ((requests.IndexOf(request) + 1) % 20 == 0)
+                if ((i + 1) % 20 == 0)
                 {
                     Console.WriteLine("\n--- Промежуточные метрики ---");
                     PrintMetrics(metricsCollector.GetCurrentMetrics(), healthEvaluator);
